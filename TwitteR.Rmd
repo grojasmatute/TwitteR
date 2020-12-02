@@ -33,10 +33,10 @@ library(ggmap)
 Authentication is required for all Twitter transactions. You will need your api_key, api_secret, access token, and token_secret. Go to https: //twitter.com/apps/new and log in.
 
 ```{r, echo= FALSE}
-api_key <- "gCQJ0ZlUetRWLz7w5muzoEP7f"
-api_secret <- "UlXO7peCRiAz5Hsfa50Q6xaD0pn7fuL4QFfNxPPQfP1oiSQBls"
-token <- "51792859-cGCU5p2AEA4UbmUOgpFixzSomJFEHj2KuDCnYB3FA"
-token_secret <- "Nz5L7AmgvKecROpqsZAAWdjmSX0ZqZneGYN4YtBwO5Kwg"
+api_key <- xxxxxxx
+api_secret <- xxxxx
+token <- xxxxx
+token_secret <- xxxxxx
 ```
 
 ```{r}

@@ -1,0 +1,278 @@
+---
+title: "Introduction to TwitteR"
+author: "Gustavo Rojas-Matute"
+date: "September 2020"
+institution: "American University"
+
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+TwitteR is a great package to access to the Twitter API for data analysis. In this tutorial you will learn how to search and organize tweets, conduct sentiment analysis and word clouds. 
+
+Before getting start be sure you have installed the packages you will need.
+
+```{r }
+library(twitteR)
+library(lubridate) 
+library(RJSONIO) 
+library(ggplot2)
+library(dismo)
+library(maps)
+library("ROAuth")
+library(ggmap)
+```
+
+
+## Authentication
+
+Authentication is required for all Twitter transactions. You will need your api_key, api_secret, access token, and token_secret. Go to https: //twitter.com/apps/new and log in.
+
+```{r, echo= FALSE}
+api_key <- "gCQJ0ZlUetRWLz7w5muzoEP7f"
+api_secret <- "UlXO7peCRiAz5Hsfa50Q6xaD0pn7fuL4QFfNxPPQfP1oiSQBls"
+token <- "51792859-cGCU5p2AEA4UbmUOgpFixzSomJFEHj2KuDCnYB3FA"
+token_secret <- "Nz5L7AmgvKecROpqsZAAWdjmSX0ZqZneGYN4YtBwO5Kwg"
+```
+
+```{r}
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+```
+
+## Search Tweets 
+
+The searchTwitter function allows us to find any term. For instance, we can find 10 tweets about "rstats". 
+
+```{r}
+MyFirstTweets <- searchTwitter('rstats', n=10)
+MyFirstTweets
+```
+
+## Looking at user
+
+With getUser you can take a closer look at a Twitter user. 
+
+```{r}
+Fed <- getUser('federalreserve')
+Fed$location #Location of the user
+Fed$description #Description of the user
+Fed$followersCount #Number of followers
+
+```
+## Timeline
+
+With userTimeline you can get the most recent tweets from an user. 
+
+```{r}
+Fed_tweets <- userTimeline('federalreserve')
+Fed_tweets[1:5]
+
+```
+
+## Trends
+getTrends function is used to pull current trending topics tracked by Twitter. The function availableTrendLocations returns a data frame per location and closestTrendLocations function retunrs a similar data but needs latituted and longitude. 
+
+```{r}
+availableTrendLocations()
+closestTrendLocations(-42, 70) ## using specific latitude and longitude
+getTrends(110978) ## using woeid
+```
+
+## Creation of a Data Frame 
+
+Using twListToDF() you can organize the data into a data frame. 
+```{r}
+Unemployment <- searchTwitter("Unemployment", n=10,lang = "en") %>% twListToDF()
+Unemployment
+```
+## Counting Tweets per Second
+
+Suppose we want to analyze the presidential campaign and want to know how many tweets mentioning each candidate are produced per second. 
+
+```{r}
+searchTerms<-c("Biden", "Trump")
+names(searchTerms)<-searchTerms
+
+searchResults<-lapply(searchTerms, function(tt){
+  print(tt)
+  searchTwitter(searchString=tt, n=1000)
+})
+tweetFrames<-lapply(searchResults, twListToDF)
+
+tweetFrames <- lapply(tweetFrames, function(df){
+  df$timeStamp <- ymd_hms(as.character(df$created)) 
+  return(df)
+})
+
+
+nTweets <- unlist(lapply(tweetFrames, function(df){
+  nrow(df)  
+}))
+
+timeElapsed <- unlist(lapply(tweetFrames, function(df){
+  as.numeric(diff(range(df$timeStamp)), units = "secs") 
+}))
+
+tweetsPerSec <- nTweets / timeElapsed
+tweetsPerSec 
+
+```
+
+## Sentimental Analysis
+Sentimental Analysis can be conducted using the package "NLP" (natural language processing). 
+
+
+```{r}
+library("NLP")
+library("syuzhet")
+library("tm")
+library("SnowballC")
+library("stringi")
+library("topicmodels")
+```
+
+Let's again analyze the sentiment of the tweets that mention both 2020 presidential candidates. 
+
+```{r}
+## search and organize 
+tweets_Joe <- searchTwitter("Biden", n=1000,lang = "en") %>% twListToDF() 
+tweets_Donald <- searchTwitter("Trump", n=1000,lang = "en") %>% twListToDF() 
+
+##lowercase
+Joe_text<- tweets_Joe$text %>% tolower()
+Donald_text<- tweets_Donald$text %>% tolower()
+## eliminate rt
+Joe_text <- gsub("rt", "", Joe_text)
+Donald_text <- gsub("rt", "", Donald_text)
+
+# Replace @UserName
+Joe_text <- gsub("@\\w+", "", Joe_text)
+Donald_text <- gsub("@\\w+", "", Donald_text)
+
+# Remove punctuation
+Joe_text <- gsub("[[:punct:]]", "", Joe_text)
+Donald_text <- gsub("[[:punct:]]", "", Donald_text)
+
+# Remove links
+Joe_text <- gsub("http\\w+", "", Joe_text)
+Donald_text <- gsub("http\\w+", "", Donald_text)
+
+# Remove tabs
+Joe_text <- gsub("[ |\t]{2,}", "", Joe_text)
+Donald_text <- gsub("[ |\t]{2,}", "", Donald_text)
+
+# Remove blank spaces at the beginning
+
+Joe_text <- gsub("^ ", "", Joe_text)
+Donald_text <- gsub("^ ", "", Donald_text)
+
+# Remove blank spaces at the end
+
+Joe_text <- gsub(" $", "", Joe_text)
+Donald_text <- gsub(" $", "", Donald_text)
+
+# Get Sentiment
+mysentiment_Joe<-get_nrc_sentiment((Joe_text))
+
+mysentiment_Trump<-get_nrc_sentiment((Donald_text))
+
+# Get scores 
+Sentimentscores_Joe<-data.frame(colSums(mysentiment_Joe[,]))
+
+names(Sentimentscores_Joe)<-"Score"
+Sentimentscores_Joe<-cbind("sentiment"=rownames(Sentimentscores_Joe),
+                                 Sentimentscores_Joe)
+rownames(Sentimentscores_Joe)<-NULL
+
+Sentimentscores_Trump<-data.frame(colSums(mysentiment_Trump[,]))
+
+names(Sentimentscores_Trump)<-"Score"
+Sentimentscores_Trump<-cbind("sentiment"=rownames(Sentimentscores_Trump),
+                           Sentimentscores_Trump)
+rownames(Sentimentscores_Trump)<-NULL
+
+#plotting the sentiments with scores
+# Candidate Joe Biden
+ggplot(data=Sentimentscores_Joe,aes(x=sentiment,y=Score))+geom_bar(aes(fill=sentiment),stat = "identity")+
+  theme(legend.position="none")+
+  xlab("Sentiments")+ylab("scores")+ggtitle("Sentiments of people behind Joe Biden")
+
+#Candidate Donald Trump
+ggplot(data=Sentimentscores_Trump,aes(x=sentiment,y=Score))+geom_bar(aes(fill=sentiment),stat = "identity")+
+  theme(legend.position="none")+
+  xlab("Sentiments")+ylab("scores")+ggtitle("Sentiments of people behind Donald Trump")
+
+
+```
+
+
+## Word Cloud
+
+With the wordcloud package you can create a word cloud for both candidates. 
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)
+## create a Corpus
+doc_joe <- Corpus(VectorSource(Joe_text))
+dtm_Joe <- TermDocumentMatrix(doc_joe) 
+matrix_Joe <- as.matrix(dtm_Joe) 
+words_joe <- sort(rowSums(matrix_Joe),decreasing=TRUE) 
+df_Joe <- data.frame(word = names(words_joe),freq=words_joe)
+wordcloud(words = df_Joe$word, freq = df_Joe$freq, min.freq = 1, max.words=200, random.order=FALSE, rot.per=0.35,   colors=brewer.pal(8, "Dark2"))
+
+##
+doc_Trump <- Corpus(VectorSource(Donald_text))
+dtm_Trump <- TermDocumentMatrix(doc_Trump) 
+matrix_Trump <- as.matrix(dtm_Trump) 
+words_Trump <- sort(rowSums(matrix_Trump),decreasing=TRUE) 
+df_Trump <- data.frame(word = names(words_Trump),freq=words_Trump)
+wordcloud(words = df_Trump$word, freq = df_Trump$freq, min.freq = 1, max.words=200, random.order=FALSE, rot.per=0.35,   colors=brewer.pal(8, "Dark2"))
+
+
+
+```
+
+Now try the following using wordcloud2: 
+
+```{r}
+wordcloud2(data=df_Joe, size=1.6, color='random-dark')
+wordcloud2(data=df_Trump, size = 0.7, shape = 'pentagon')
+```
+
+## Sentiment Analysis Package
+
+The SentimentAnalysis R Package compute sentiment statistics for each text/document, then shows how many exhibit positive/negative sentiment, as well as the highest and lowest sentiment score. 
+
+```{r}
+library(SentimentAnalysis)
+Joe_Sent <- analyzeSentiment(Joe_text)
+
+table(convertToBinaryResponse(Joe_Sent$SentimentLM))
+## draw Histogram 
+hist(Joe_Sent$SentimentLM, probability=TRUE,
+     main="Histogram: Density of Distribution for Standardized Sentiment Variable")
+
+Trump_Sent <- analyzeSentiment(Donald_text)
+
+table(convertToBinaryResponse(Trump_Sent$SentimentLM))
+
+## Plot
+plotSentiment(Trump_Sent$SentimentLM)
+
+
+```
+
+## References and links 
+
+Gentry, Jeff: "Twitter client fo R". December 30, 2014.
+Sentiment Analysis in R Made Simple https://medium.com/@ODSC/sentiment-analysis-in-r-made-simple-bafea2c3a29c
+
+
+
+
